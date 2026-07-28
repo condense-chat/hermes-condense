@@ -1,0 +1,127 @@
+# hermes ~/.hermes/config.yaml: condense routes.
+#
+# Merge the `providers:` and `compression:` blocks into your existing config.
+# Everything here uses ${VAR} expansion (hermes supports ${VAR} and
+# ${env:VAR}) so no credential is ever written to disk.
+#
+# Export before launching. CONDENSE_AUTH_TOKEN is a condense API key
+# (ak_-prefixed), generated in the condense dashboard.
+#
+#   export CONDENSE_AUTH_TOKEN="ak_..."
+#   export HERMES_CONDENSE_PROFILE=condense-openrouter-msg
+#
+# x-condense-user-id is NOT needed alongside the token. See docs/setup.md.
+#
+# Route prefixes are condense's own:
+#   /anthropic/v1/messages        the Anthropic SDK appends "/v1/messages"
+#   /openai/v1/chat/completions   the OpenAI SDK appends "/chat/completions"
+#
+# Requires the condense_headers plugin for every anthropic_messages entry.
+
+providers:
+
+  # 1. condense → Anthropic direct.
+  #    No upstream override: condense's default upstream is api.anthropic.com.
+  #    The Anthropic key rides as x-api-key and condense forwards it upstream
+  #    verbatim. x-condense-auth-token is separate: it authenticates you to
+  #    condense itself. It cannot use Authorization, since the Anthropic SDK
+  #    owns that slot.
+  condense-anthropic:
+    base_url: https://api.condense.chat/anthropic
+    api_mode: anthropic_messages
+    key_env: ANTHROPIC_API_KEY
+    model: claude-opus-4-5
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+
+  # 2. condense → OpenRouter over chat/completions.
+  #    condense appends "/chat/completions" to the upstream override, giving
+  #    https://openrouter.ai/api/v1/chat/completions. The OpenAI SDK sends
+  #    Authorization: Bearer <key>, which condense forwards verbatim. That is the
+  #    auth scheme OpenRouter documents.
+  #    This is the only entry that works WITHOUT the plugin.
+  condense-openrouter-cc:
+    base_url: https://api.condense.chat/openai/v1
+    api_mode: chat_completions
+    key_env: OPENROUTER_API_KEY
+    model: anthropic/claude-opus-4.5
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://openrouter.ai/api/v1
+
+  # 3. condense → OpenRouter over the Anthropic Messages API.
+  #    Upstream base is ".../api", NOT ".../api/v1", because condense appends
+  #    "/v1/messages" itself.
+  #    Shares base_url with entry 1, so set HERMES_CONDENSE_PROFILE.
+  #    See docs/limitations.md on the x-api-key vs Bearer question.
+  condense-openrouter-msg:
+    base_url: https://api.condense.chat/anthropic
+    api_mode: anthropic_messages
+    key_env: OPENROUTER_API_KEY
+    model: anthropic/claude-opus-4.5
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://openrouter.ai/api
+
+  # 4. condense → Vertex AI over the Anthropic Messages API.
+  #    NOT FUNCTIONAL. Kept as the shape a condense-side fix would need.
+  #    condense builds a fixed "{base}/v1/messages", but Vertex's Anthropic
+  #    route puts the model in the PATH:
+  #      /v1/projects/<p>/locations/<l>/publishers/anthropic/models/<model>:streamRawPredict
+  #    and the body must drop `model` and add
+  #    `anthropic_version: vertex-2023-10-16`.
+  #    Disabled so it stays out of the /model menu.
+  #    For Vertex today use entry 2's shape with the upstream override set to
+  #    https://<region>-aiplatform.googleapis.com/v1beta1/projects/<project>/locations/<region>/endpoints/openapi
+  condense-vertex-msg:
+    enabled: false
+    base_url: https://api.condense.chat/anthropic
+    api_mode: anthropic_messages
+    key_env: VERTEX_ACCESS_TOKEN
+    model: claude-opus-4-5@20251101
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://us-east5-aiplatform.googleapis.com
+
+
+# ── Compaction ────────────────────────────────────────────────────────
+# Condense compacts the payload in flight. Hermes compacts its own stored
+# history. Neither sees what the other did, so at hermes' default threshold
+# both fire in the same range and the conversation gets summarised twice.
+#
+# Keep both on, but move hermes out of the way: condense handles the routine
+# case, hermes only steps in if the payload somehow arrives at the provider
+# uncompacted.
+compression:
+  enabled: true
+
+  # Backstop rather than routine compaction. Default is 0.50, floored at 0.75
+  # for windows under 512K. This setting is raise-only, so 0.90 wins.
+  #
+  # Leave `enabled: true`. Turning compaction off also turns off overflow
+  # RECOVERY: the long-context-tier 429, 413 payload-too-large and
+  # context-overflow paths all stop compacting and surface a terminal error
+  # instead. That removes hermes' last line of defence, which matters because
+  # condense forwards the payload unchanged if compaction fails or is held off
+  # by x-condense-auto-condense-min-tokens.
+  #
+  # The check that actually backstops is hermes' pre-API preflight, which
+  # estimates local history. The post-response check reads API-reported
+  # prompt_tokens, which behind condense is already the reduced number, so it
+  # rarely fires.
+  threshold: 0.90
+
+  # Leave at 0. This prune rewrites history mid-session, which invalidates the
+  # cached prefix condense relies on and forces it to re-warm.
+  proactive_prune_tokens: 0
+
+  # Worth knowing: the anti-thrash guard backs off after two compactions that
+  # each saved under 10%, measured in API-reported tokens. Behind condense
+  # those numbers are already reduced, so hermes can decide its own compaction
+  # is ineffective and stop. If /context shows a large local history while
+  # hermes declines to compact, that guard is why.
+
+
+plugins:
+  enabled:
+    - condense_headers

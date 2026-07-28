@@ -1,0 +1,4 @@
+name: condense_headers
+version: "1.0.0"
+description: "Injects x-condense-* headers on anthropic_messages requests to the condense proxy. Works around hermes dropping per-provider extra_headers in that api_mode."
+author: local
