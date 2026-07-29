@@ -41,12 +41,18 @@ and drop the header entirely.
 The override you pass is a **base**, not a full URL. Condense appends the rest,
 and what it appends differs per wire:
 
-| Wire | condense appends | OpenRouter override |
-|---|---|---|
-| Anthropic Messages | `/v1/messages` | `https://openrouter.ai/api` |
-| OpenAI chat/completions | `/chat/completions` | `https://openrouter.ai/api/v1` |
+| Wire | condense appends | Anthropic | OpenAI | OpenRouter |
+|---|---|---|---|---|
+| Anthropic Messages | `/v1/messages` | `https://api.anthropic.com` | (none) | `https://openrouter.ai/api` |
+| OpenAI chat/completions | `/chat/completions` | (none) | `https://api.openai.com/v1` | `https://openrouter.ai/api/v1` |
+| OpenAI Responses | `/responses` | (none) | `https://api.openai.com/v1` | `https://openrouter.ai/api/v1` |
 
-Getting this backwards is a 404 from the upstream, not from condense.
+Note the asymmetry: the Anthropic-wire base carries no `/v1` because condense
+adds it, while the OpenAI-wire base keeps its own. Getting this backwards is a
+404 from the upstream, not from condense.
+
+The `(none)` cells are gaps in the upstreams, not in condense: OpenAI serves no
+Anthropic Messages endpoint, and Anthropic serves no OpenAI-wire endpoint.
 
 ## Credentials
 
@@ -76,12 +82,18 @@ hermes --provider condense-openrouter-msg
 `choices=` restriction. At runtime, `/model` lists them as
 `custom:<name>`.
 
-When two entries share a `base_url` (entries 1 and 3 in the example both use
-`/anthropic`), also set:
+When entries share a `base_url`, also set:
 
 ```sh
 export HERMES_CONDENSE_PROFILE=condense-openrouter-msg
 ```
+
+Most of the example config shares: entries 1 and 5 sit on `/anthropic` (as does
+the disabled entry 6), and entries 2, 3 and 4 sit on `/openai/v1`. The plugin
+narrows a tie by `api_mode` first, which separates the two OpenAI entries from
+each other, but `condense-openai-cc` and `condense-openrouter-cc` remain
+ambiguous to it, as do `condense-anthropic` and `condense-openrouter-msg`. Set
+the variable and the ambiguity goes away.
 
 Without it the plugin falls back to scanning `--provider` from `sys.argv`,
 which works for the common launch but not for programmatic use.

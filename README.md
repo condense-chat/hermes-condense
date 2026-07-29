@@ -25,8 +25,9 @@ hermes plugins enable condense_headers
 
 Copy the provider entries you want out of
 [`examples/config.yaml`](examples/config.yaml) into `~/.hermes/config.yaml`.
-There are four, covering Anthropic direct and OpenRouter over both wire
-formats.
+There are six, covering Anthropic direct, OpenAI direct over both OpenAI wire
+formats, and OpenRouter over both chat/completions and the Anthropic Messages
+API.
 
 ## Run
 
@@ -41,8 +42,9 @@ hermes --provider condense-openrouter-msg
 dashboard. Keys are `ak_`-prefixed, and the full secret is only shown at
 creation time.
 
-`HERMES_CONDENSE_PROFILE` matters when two config entries share a `base_url`,
-which the Anthropic-wire ones do. Details in
+`HERMES_CONDENSE_PROFILE` matters when config entries share a `base_url`, which
+most of the example ones do — everything sits on one of two condense routes,
+differing only in `api_mode` and `x-condense-upstream-url`. Set it. Details in
 [picking which entry's headers apply](#picking-which-entrys-headers-apply).
 
 ## Check it works
@@ -61,7 +63,7 @@ where a bare model listing has no provider credential to use.
 
 ## Docs
 
-[docs/setup.md](docs/setup.md) covers the routes, headers, and the four
+[docs/setup.md](docs/setup.md) covers the routes, headers, and the six
 configurations in the example config.
 
 [docs/limitations.md](docs/limitations.md) lists what doesn't work yet and the
@@ -135,12 +137,13 @@ Resolution goes by route, because the middleware context reports
 `runtime_provider.py::_resolve_named_custom_runtime`, so the entry name isn't
 available there.
 
-Routes aren't always unique, though. Several entries can sit on the same
-condense route and differ only in `x-condense-upstream-url`. When that happens
-the plugin checks `HERMES_CONDENSE_PROFILE` first, then falls back to scanning
-`--provider` out of `sys.argv`, and failing both takes the first match and logs
-a warning. Set `HERMES_CONDENSE_PROFILE` whenever two entries share a
-`base_url`.
+Routes aren't always unique, though — that's the normal case, not the corner
+case. Condense has two proxied routes and the example config puts six entries
+on them, differing only in `api_mode` and `x-condense-upstream-url`. The plugin
+narrows a tie by `api_mode`, then checks `HERMES_CONDENSE_PROFILE`, then falls
+back to scanning `--provider` out of `sys.argv`, and failing all three takes the
+first match and logs a warning. Set `HERMES_CONDENSE_PROFILE` whenever entries
+share a `base_url`.
 
 ## Status
 

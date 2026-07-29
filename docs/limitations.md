@@ -5,9 +5,31 @@
 | Configuration | Route | Status |
 |---|---|---|
 | condense → Anthropic direct | `/anthropic` | works with the plugin |
+| condense → OpenAI, chat/completions | `/openai/v1` | works **without** the plugin |
+| condense → OpenAI, Responses | `/openai/v1` | unverified; see below |
 | condense → OpenRouter, chat/completions | `/openai/v1` | works **without** the plugin |
 | condense → OpenRouter, Anthropic Messages | `/anthropic` | works with the plugin; see the auth note below |
 | condense → Vertex AI, Anthropic Messages | `/anthropic` | not supported; use the chat/completions route |
+
+There is no OpenAI entry on the `/anthropic` route. OpenAI serves no Anthropic
+Messages endpoint, so there is no upstream to override to.
+
+---
+
+## OpenAI over the Responses API
+
+Unverified end to end. The route exists on condense
+(`POST /openai/v1/responses`) and hermes has the matching `codex_responses`
+api_mode, but the combination has not been exercised here.
+
+Two things to watch if you try it. Hermes routes a distinct kwarg set to this
+wire — `_RESPONSES_ONLY_KWARGS` in `sanitize_anthropic_kwargs` exists precisely
+because the two OpenAI wires disagree — so a kwarg rejected on one may be
+required on the other. And compaction on this wire has to preserve encrypted
+reasoning items across turns; if condense drops or reorders them, expect the
+upstream to reject the turn rather than silently degrade.
+
+Use `condense-openai-cc` if you want the verified path.
 
 ---
 
@@ -62,20 +84,27 @@ should use the name-resolved `runtime["extra_headers"]`, which
 ## Auxiliary traffic follows the route, not the profile
 
 Auxiliary calls (titles, compaction summaries, vision) land on the rewritten
-`/openai/v1` route, which exactly matches the `condense-openrouter-cc` entry,
-so they pick up its chat/completions-shaped upstream automatically. That is the
-correct *shape*, but it means that on the `condense-anthropic` profile the main
-conversation goes to Anthropic while auxiliary calls go to OpenRouter.
+`/openai/v1` route and pick up whichever entry sits there, which is rarely the
+one the main conversation is using. On the `condense-anthropic` profile the
+main conversation goes to Anthropic while auxiliary calls go somewhere else
+entirely.
 
-Functional and cheap. If you want auxiliary traffic to follow the main
-upstream, pin it explicitly rather than letting it be inferred from a URL:
+With more than one chat/completions entry on that route — the example config
+has two, `condense-openai-cc` and `condense-openrouter-cc` — the choice is also
+ambiguous. `HERMES_CONDENSE_PROFILE` only disambiguates when it names one of
+the matching entries, and for auxiliary traffic it usually names the *main*
+provider instead, which is on a different route. The plugin then logs a warning
+and takes the first match in config order, i.e. `condense-openai-cc`.
+
+Functional and cheap either way, but if you care where auxiliary traffic goes,
+pin it explicitly rather than letting it be inferred from a URL:
 
 ```yaml
 auxiliary:
   title_generation:
-    provider: condense-openrouter-cc
+    provider: condense-openai-cc
   compression:
-    provider: condense-openrouter-cc
+    provider: condense-openai-cc
 ```
 
 ---

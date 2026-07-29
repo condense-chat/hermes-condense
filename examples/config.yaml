@@ -15,17 +15,29 @@
 # Route prefixes are condense's own:
 #   /anthropic/v1/messages        the Anthropic SDK appends "/v1/messages"
 #   /openai/v1/chat/completions   the OpenAI SDK appends "/chat/completions"
+#   /openai/v1/responses          the OpenAI SDK appends "/responses"
 #
 # Requires the condense_headers plugin for every anthropic_messages entry.
+#
+# Several entries below deliberately share a base_url and differ only in
+# api_mode and x-condense-upstream-url. The plugin matches by route, so
+# HERMES_CONDENSE_PROFILE is what tells it which entry you meant.
 
 providers:
 
   # 1. condense → Anthropic direct.
-  #    No upstream override: condense's default upstream is api.anthropic.com.
   #    The Anthropic key rides as x-api-key and condense forwards it upstream
   #    verbatim. x-condense-auth-token is separate: it authenticates you to
   #    condense itself. It cannot use Authorization, since the Anthropic SDK
   #    owns that slot.
+  #
+  #    The upstream override is pinned rather than left to the account default,
+  #    so this entry keeps pointing at Anthropic no matter how the account is
+  #    configured. Note the base has no "/v1": condense appends "/v1/messages".
+  #    Drop the line if your account has no upstream-override capability; the
+  #    default upstream is api.anthropic.com anyway.
+  #
+  #    Shares base_url with entry 5, so set HERMES_CONDENSE_PROFILE.
   condense-anthropic:
     base_url: https://api.condense.chat/anthropic
     api_mode: anthropic_messages
@@ -33,13 +45,49 @@ providers:
     model: claude-opus-4-5
     extra_headers:
       x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://api.anthropic.com
 
-  # 2. condense → OpenRouter over chat/completions.
+  # 2. condense → OpenAI direct, over chat/completions.
+  #    Upstream base is ".../v1", because condense appends "/chat/completions".
+  #    The OpenAI SDK sends Authorization: Bearer <key>, which condense
+  #    forwards verbatim, and that is what OpenAI expects.
+  #    Needs no plugin: extra_headers survive on the chat_completions path.
+  #    Shares base_url with entries 3 and 4, so set HERMES_CONDENSE_PROFILE.
+  #
+  #    There is deliberately no OpenAI entry on the /anthropic route: OpenAI
+  #    serves no Anthropic Messages endpoint, so there is nothing to point at.
+  condense-openai-cc:
+    base_url: https://api.condense.chat/openai/v1
+    api_mode: chat_completions
+    key_env: OPENAI_API_KEY
+    model: gpt-5
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://api.openai.com/v1
+
+  # 3. condense → OpenAI over the Responses API.
+  #    UNVERIFIED end to end; see docs/limitations.md. Same route prefix as
+  #    entry 2 (the SDK appends "/responses" instead of "/chat/completions"),
+  #    so base_url and the upstream override are identical and only api_mode
+  #    differs.
+  #    Reasoning models keep their encrypted reasoning items on this wire,
+  #    which chat/completions discards between turns.
+  condense-openai-responses:
+    base_url: https://api.condense.chat/openai/v1
+    api_mode: codex_responses
+    key_env: OPENAI_API_KEY
+    model: gpt-5
+    extra_headers:
+      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-upstream-url: https://api.openai.com/v1
+
+  # 4. condense → OpenRouter over chat/completions.
   #    condense appends "/chat/completions" to the upstream override, giving
   #    https://openrouter.ai/api/v1/chat/completions. The OpenAI SDK sends
   #    Authorization: Bearer <key>, which condense forwards verbatim. That is the
   #    auth scheme OpenRouter documents.
-  #    This is the only entry that works WITHOUT the plugin.
+  #    Works WITHOUT the plugin, as does entry 2.
+  #    Shares base_url with entries 2 and 3, so set HERMES_CONDENSE_PROFILE.
   condense-openrouter-cc:
     base_url: https://api.condense.chat/openai/v1
     api_mode: chat_completions
@@ -49,7 +97,7 @@ providers:
       x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
       x-condense-upstream-url: https://openrouter.ai/api/v1
 
-  # 3. condense → OpenRouter over the Anthropic Messages API.
+  # 5. condense → OpenRouter over the Anthropic Messages API.
   #    Upstream base is ".../api", NOT ".../api/v1", because condense appends
   #    "/v1/messages" itself.
   #    Shares base_url with entry 1, so set HERMES_CONDENSE_PROFILE.
@@ -63,7 +111,7 @@ providers:
       x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
       x-condense-upstream-url: https://openrouter.ai/api
 
-  # 4. condense → Vertex AI over the Anthropic Messages API.
+  # 6. condense → Vertex AI over the Anthropic Messages API.
   #    NOT FUNCTIONAL. Kept as the shape a condense-side fix would need.
   #    condense builds a fixed "{base}/v1/messages", but Vertex's Anthropic
   #    route puts the model in the PATH:
@@ -71,7 +119,7 @@ providers:
   #    and the body must drop `model` and add
   #    `anthropic_version: vertex-2023-10-16`.
   #    Disabled so it stays out of the /model menu.
-  #    For Vertex today use entry 2's shape with the upstream override set to
+  #    For Vertex today use entry 4's shape with the upstream override set to
   #    https://<region>-aiplatform.googleapis.com/v1beta1/projects/<project>/locations/<region>/endpoints/openapi
   condense-vertex-msg:
     enabled: false
