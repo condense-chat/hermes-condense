@@ -24,7 +24,7 @@ A base URL whose path ends in `/anthropic` also makes hermes auto-select
 
 | Header | Purpose |
 |---|---|
-| `x-condense-auth-token` | your condense account key. Required. Cannot use `Authorization`, since the Anthropic SDK owns that slot |
+| `x-condense-auth-token` | your condense API key. Required. Cannot use `Authorization`, since the Anthropic SDK owns that slot |
 | `x-condense-upstream-url` | which upstream condense forwards to. Omit for the account default |
 | `x-condense-upstream-key` | use condense's stored upstream key instead of the one hermes sends |
 | `x-condense-session-id` | groups requests into one session in the dashboard |
@@ -56,13 +56,12 @@ Anthropic Messages endpoint, and Anthropic serves no OpenAI-wire endpoint.
 
 ## Credentials
 
-`x-condense-auth-token` carries a condense API key, generated in the condense
-dashboard. Keys are `ak_`-prefixed. The full secret is shown once at creation;
-after that `/me` returns only the masked `ak_<6chars>...` prefix, so copy it
-while it is on screen.
+`x-condense-auth-token` carries a condense API key. Create one at
+<https://helm.condense.chat/#keys>. The full secret is shown once at creation,
+so copy it while it is on screen.
 
 ```sh
-export CONDENSE_AUTH_TOKEN="ak_..."
+export CONDENSE_API_TOKEN="ck_api_..."
 ```
 
 Config values use `${VAR}` expansion, so no secret is written to
@@ -104,7 +103,7 @@ Free check, no model invoked:
 
 ```sh
 curl -s https://api.condense.chat/anthropic/v1/models \
-  -H "x-condense-auth-token: $CONDENSE_AUTH_TOKEN"
+  -H "x-condense-auth-token: $CONDENSE_API_TOKEN"
 ```
 
 | Response | Meaning |
