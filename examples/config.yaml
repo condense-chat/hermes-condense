@@ -4,10 +4,10 @@
 # Everything here uses ${VAR} expansion (hermes supports ${VAR} and
 # ${env:VAR}) so no credential is ever written to disk.
 #
-# Export before launching. CONDENSE_AUTH_TOKEN is a condense API key
-# (ak_-prefixed), generated in the condense dashboard.
+# Export before launching. CONDENSE_API_TOKEN is a condense API key, created
+# at https://helm.condense.chat/#keys.
 #
-#   export CONDENSE_AUTH_TOKEN="ak_..."
+#   export CONDENSE_API_TOKEN="ck_api_..."
 #   export HERMES_CONDENSE_PROFILE=condense-openrouter-msg
 #
 # x-condense-user-id is NOT needed alongside the token. See docs/setup.md.
@@ -44,14 +44,15 @@ providers:
     key_env: ANTHROPIC_API_KEY
     model: claude-opus-4-5
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://api.anthropic.com
 
   # 2. condense → OpenAI direct, over chat/completions.
   #    Upstream base is ".../v1", because condense appends "/chat/completions".
   #    The OpenAI SDK sends Authorization: Bearer <key>, which condense
   #    forwards verbatim, and that is what OpenAI expects.
-  #    Needs no plugin: extra_headers survive on the chat_completions path.
+  #    Needs no plugin only when it is the sole entry on its route: core hermes
+  #    sends the first route-matching entry's extra_headers.
   #    Shares base_url with entries 3 and 4, so set HERMES_CONDENSE_PROFILE.
   #
   #    There is deliberately no OpenAI entry on the /anthropic route: OpenAI
@@ -62,11 +63,12 @@ providers:
     key_env: OPENAI_API_KEY
     model: gpt-5
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://api.openai.com/v1
 
   # 3. condense → OpenAI over the Responses API.
-  #    UNVERIFIED end to end; see docs/limitations.md. Same route prefix as
+  #    Single turn verified; multi-turn unverified, see docs/limitations.md.
+  #    Same route prefix as
   #    entry 2 (the SDK appends "/responses" instead of "/chat/completions"),
   #    so base_url and the upstream override are identical and only api_mode
   #    differs.
@@ -78,7 +80,7 @@ providers:
     key_env: OPENAI_API_KEY
     model: gpt-5
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://api.openai.com/v1
 
   # 4. condense → OpenRouter over chat/completions.
@@ -86,7 +88,8 @@ providers:
   #    https://openrouter.ai/api/v1/chat/completions. The OpenAI SDK sends
   #    Authorization: Bearer <key>, which condense forwards verbatim. That is the
   #    auth scheme OpenRouter documents.
-  #    Works WITHOUT the plugin, as does entry 2.
+  #    Without the plugin core hermes sends entry 2's headers here (first
+  #    match on the route), so this call would go to OpenAI.
   #    Shares base_url with entries 2 and 3, so set HERMES_CONDENSE_PROFILE.
   condense-openrouter-cc:
     base_url: https://api.condense.chat/openai/v1
@@ -94,7 +97,7 @@ providers:
     key_env: OPENROUTER_API_KEY
     model: anthropic/claude-opus-4.5
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://openrouter.ai/api/v1
 
   # 5. condense → OpenRouter over the Anthropic Messages API.
@@ -108,7 +111,7 @@ providers:
     key_env: OPENROUTER_API_KEY
     model: anthropic/claude-opus-4.5
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://openrouter.ai/api
 
   # 6. condense → Vertex AI over the Anthropic Messages API.
@@ -128,7 +131,7 @@ providers:
     key_env: VERTEX_ACCESS_TOKEN
     model: claude-opus-4-5@20251101
     extra_headers:
-      x-condense-auth-token: ${CONDENSE_AUTH_TOKEN}
+      x-condense-auth-token: ${CONDENSE_API_TOKEN}
       x-condense-upstream-url: https://us-east5-aiplatform.googleapis.com
 
 

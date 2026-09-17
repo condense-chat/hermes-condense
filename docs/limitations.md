@@ -5,9 +5,9 @@
 | Configuration | Route | Status |
 |---|---|---|
 | condense → Anthropic direct | `/anthropic` | works with the plugin |
-| condense → OpenAI, chat/completions | `/openai/v1` | works **without** the plugin |
-| condense → OpenAI, Responses | `/openai/v1` | unverified; see below |
-| condense → OpenRouter, chat/completions | `/openai/v1` | works **without** the plugin |
+| condense → OpenAI, chat/completions | `/openai/v1` | works; needs the plugin when another entry shares the route |
+| condense → OpenAI, Responses | `/openai/v1` | single turn works; multi-turn unverified, see below |
+| condense → OpenRouter, chat/completions | `/openai/v1` | works; needs the plugin when another entry shares the route |
 | condense → OpenRouter, Anthropic Messages | `/anthropic` | works with the plugin; see the auth note below |
 | condense → Vertex AI, Anthropic Messages | `/anthropic` | not supported; use the chat/completions route |
 
@@ -18,13 +18,13 @@ Messages endpoint, so there is no upstream to override to.
 
 ## OpenAI over the Responses API
 
-Unverified end to end. The route exists on condense
-(`POST /openai/v1/responses`) and hermes has the matching `codex_responses`
-api_mode, but the combination has not been exercised here.
+A single-turn call works (`POST /openai/v1/responses`, hermes'
+`codex_responses` api_mode). Multi-turn sessions, where compaction kicks in,
+have not been exercised.
 
 Two things to watch if you try it. Hermes routes a distinct kwarg set to this
-wire — `_RESPONSES_ONLY_KWARGS` in `sanitize_anthropic_kwargs` exists precisely
-because the two OpenAI wires disagree — so a kwarg rejected on one may be
+wire (`_RESPONSES_ONLY_KWARGS` in `sanitize_anthropic_kwargs` exists
+because the two OpenAI wires disagree), so a kwarg rejected on one may be
 required on the other. And compaction on this wire has to preserve encrypted
 reasoning items across turns; if condense drops or reorders them, expect the
 upstream to reject the turn rather than silently degrade.
@@ -89,8 +89,8 @@ one the main conversation is using. On the `condense-anthropic` profile the
 main conversation goes to Anthropic while auxiliary calls go somewhere else
 entirely.
 
-With more than one chat/completions entry on that route — the example config
-has two, `condense-openai-cc` and `condense-openrouter-cc` — the choice is also
+With more than one chat/completions entry on that route (the example config
+has two, `condense-openai-cc` and `condense-openrouter-cc`), the choice is also
 ambiguous. `HERMES_CONDENSE_PROFILE` only disambiguates when it names one of
 the matching entries, and for auxiliary traffic it usually names the *main*
 provider instead, which is on a different route. The plugin then logs a warning
@@ -124,18 +124,20 @@ turn can outgrow that window.
 
 ## The plugin patches internals by name
 
-Three symbols, all fail-open:
+Four symbols, all fail-open. Last checked against hermes-agent v0.21.3
+(`951600dc79`).
 
 | Symbol | Module |
 |---|---|
 | `build_anthropic_client` | `agent/anthropic_adapter.py` |
 | `_to_openai_base_url` | `agent/auxiliary_client.py` |
 | `_create_openai_client` | `agent/auxiliary_client.py` |
+| `get_custom_provider_extra_headers` | `hermes_cli/config_providers.py` |
 
 Only the `llm_request` middleware uses a supported extension point. After a
 hermes upgrade, re-verify:
 
-1. those three symbols still exist with compatible signatures
+1. those four symbols still exist with compatible signatures
 2. `extra_headers` is still absent from `_RESPONSES_ONLY_KWARGS` in
    `sanitize_anthropic_kwargs`
 3. `_apply_user_default_headers` still returns early for `anthropic_messages`

@@ -265,7 +265,40 @@ def _wrap_aux_openai() -> bool:
     return True
 
 
+# ── 4. main loop: OpenAI-wire client headers ─────────────────────────────
+
+def _wrap_route_headers() -> bool:
+    """Core picks the *first* entry on a route, so entries sharing
+    ``/openai/v1`` (OpenAI vs OpenRouter upstream) all get the first one's
+    ``x-condense-upstream-url``. Use the profile-aware selection instead.
+    """
+    try:
+        from hermes_cli import config_providers
+    except Exception:
+        logger.debug("condense_headers: config_providers unavailable", exc_info=True)
+        return False
+
+    original = getattr(config_providers, "get_custom_provider_extra_headers", None)
+    if original is None or getattr(original, "_condense_wrapped", False):
+        return False
+
+    condense_hosts = {_host_of(e.get("base_url")) for e in _condense_entries()}
+    condense_hosts.discard("")
+
+    def wrapped(base_url, *args, **kwargs):
+        if _host_of(base_url) in condense_hosts:
+            headers = _headers_for(base_url)
+            if headers:
+                return headers
+        return original(base_url, *args, **kwargs)
+
+    wrapped._condense_wrapped = True
+    config_providers.get_custom_provider_extra_headers = wrapped
+    return True
+
+
 def register(ctx) -> None:
     ctx.register_middleware("llm_request", inject_condense_headers)
     _wrap_build_anthropic_client()
     _wrap_aux_openai()
+    _wrap_route_headers()
