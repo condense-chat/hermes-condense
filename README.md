@@ -1,5 +1,7 @@
 ![Hermes Agent with Condense](docs/img/hermes-banner.svg)
 
+[condense.chat](https://condense.chat) · [condense.chat/docs](https://condense.chat/docs/) · [helm.condense.chat](https://helm.condense.chat)
+
 **Compress long Hermes Agent conversations before they reach the model.** Keep using Hermes with your Anthropic, OpenAI or OpenRouter key. The plugin sends the headers Condense needs to compact conversation history and forward each request to the provider you choose.
 
 [Quickstart](#quickstart) · [Provider profiles](#provider-profiles) · [How the plugin works](docs/how-it-works.md) · [Compatibility](docs/limitations.md)
